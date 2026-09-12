@@ -24,9 +24,6 @@
 
 params ["_vehicle", "", "", "", "_ammo", "_magazine", "_projectile"];
 
-// Large enough distance to not simulate any wind deflection
-if (_vehicle distance ACE_player > 8000) exitWith {};
-
 if !(_ammo in KAT_ProjectileCache) exitWith {};
 
 private _configClass = (configFile >> "CfgAmmo" >> _ammo);
@@ -35,19 +32,33 @@ private _lifetime = [_configClass, "KAT_lifetime", 60] call BIS_fnc_returnConfig
 private _radius = [_configClass, "KAT_radius", 10] call BIS_fnc_returnConfigEntry;
 private _gasLevel = [_configClass, "KAT_toxicLvL", 1] call BIS_fnc_returnConfigEntry;
 
+// VX is persistent
+if (_gasLevel == 5) then {
+    _lifetime = missionNamespace getVariable [QGVAR(vx_cloudLifetime), _lifetime];
+};
+
+// Track the round until it detonates, then register the cloud once at the impact point.
 [{
     params ["_args", "_handler"];
-    _args params ["_projectile", "_gasInfo"];
-    _gasInfo params ["_lifetime", "_radius", "_gasLeveL"];
+    _args params ["_projectile", "_gasInfo", "_impactPos", "_key"];
 
-    if (isNull _projectile || {!alive _projectile}) exitWith {
-        [_handler] call CBA_fnc_removePerFrameHandler;
+    if (!isNull _projectile && {alive _projectile}) exitWith {
+        _args set [2, getPosASL _projectile];
     };
 
-    [QGVAR(addGasSource), [_projectile, _radius, _gasLevel, _projectile, {
+    [_handler] call CBA_fnc_removePerFrameHandler;
+
+    _gasInfo params ["_lifetime", "_radius", "_gasLevel"];
+
+    [QGVAR(addGasSource), [_impactPos, _radius, _gasLevel, _key, {
         params ["_endTime"];
 
         CBA_missionTime < _endTime // return
     }, [CBA_missionTime + _lifetime]]] call CBA_fnc_serverEvent;
 
-}, 0, [_projectile, [_lifetime, _radius, _gasLevel]]] call CBA_fnc_addPerFrameHandler;
+}, 0, [
+    _projectile,
+    [_lifetime, _radius, _gasLevel],
+    getPosASL _projectile,
+    format ["%1_%2_%3", QGVAR(gasRound), _projectile, CBA_missionTime] // built while the round still exists, so every round gets its own cloud instead of evicting the previous one
+]] call CBA_fnc_addPerFrameHandler;

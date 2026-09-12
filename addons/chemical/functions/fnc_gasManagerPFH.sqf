@@ -16,6 +16,8 @@
  * Public: No
  */
 
+private _exposedNow = [];
+
 {
     _y params ["_gasLogic", "_radius", "_gasLevel", "_condition", "_conditionArgs", "_isSealable"];
     TRACE_2("gasManagerPFH loop",_x,_y);
@@ -31,7 +33,9 @@
         if (_effectsJipID != "") then {
             [_effectsJipID] call CBA_fnc_removeGlobalEventJIP;
         };
-        [QGVAR(removeZoneParticles), [netId _gasLogic]] call CBA_fnc_globalEvent;
+        if (GVAR(enableParticleEffects)) then {
+            [QGVAR(removeZoneParticles), [netId _gasLogic]] call CBA_fnc_globalEvent;
+        };
 
         detach _gasLogic;
         deleteVehicle _gasLogic;
@@ -53,8 +57,18 @@
         private _intensity = 1 - (_distance / _radius);
 
         _x setVariable [QGVAR(areaIntensity), _intensity, true];
+        _exposedNow pushBackUnique _x;
 
         [QGVAR(poison), [_x, _gasLevel, _infectedObject], _x] call CBA_fnc_targetEvent;
 
     } forEach nearestObjects [_gasLogic, ["CAManBase"], _radius];
 } forEach GVAR(gasSources);
+
+// Units that were in a cloud last tick but are in none now read as clean air again
+{
+    if !(_x in _exposedNow) then {
+        _x setVariable [QGVAR(areaIntensity), 0, true];
+    };
+} forEach GVAR(exposedUnits);
+
+GVAR(exposedUnits) = _exposedNow;
